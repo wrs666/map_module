@@ -1,0 +1,7 @@
+uint8 STATICCURVE = 0
+uint8 PLANNING = 1
+uint8 mode
+
+curve static_curve
+
+---

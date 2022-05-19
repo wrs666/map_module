@@ -1,0 +1,42 @@
+geometry_msgs/PoseStamped current_pose #车辆当前在world坐标系下的位姿
+float64 request_length #请求路径长度，地图模块默认50m
+float64 point_margin #采样点间隔
+---
+uint8 NORMAL = 0
+uint8 WRONG_ORIENTATION = 1
+uint8 OUT_MAP = 2
+uint8 current_pose_state #车辆当前的位置状态
+
+uint8 SUCCEED = 0
+uint8 GOAL_UNREACHABLE = 1
+uint8 status #目标点是否可达
+
+float64 acquired_length #地图模块给出路径的实际长度
+geometry_msgs/PoseStamped goal_pose #目标点world坐标系下的位姿
+
+bool left_lane_exist #车辆左边是否存在车道
+bool right_lane_exist #车辆右边是否存在车道
+
+locallane left_lane #车辆左边车道的采样序列
+locallane center_lane #车辆当前车道的采样序列
+locallane right_lane #车辆右边车道的采样序列
+
+#float64 terminal_heading
+
+# uint8 CHANGE_LEFT = 1
+# uint8 KEEP_CENTER = 2
+# uint8 CHANGE_RIGHT = 4
+# uint8 CENTER_LEFT = 3
+# uint8 CENTER_RIGHT = 6
+# uint8 ALL_AVAILABLE = 7
+# uint8 guidance
+# bool multiple_lane_changes
+
+# bool obstacle_avoidance_allowed
+# float64 distance_to_stop
+# float64 distance_to_goal
+
+# uint64 current_wayid
+
+# VirtualObstacle[] virtual_obstacles
+# string extra_flags
