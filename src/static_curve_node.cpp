@@ -16,7 +16,7 @@
 #include <sstream>
 #include <cmath>
 
-#define path "/home/wrs/map/src/map_module/recordingpath_filtered.csv"
+#define path "/home/wrs/map/src/map_module/path3.csv"
 
 class TrackPoint {
   private:
@@ -199,7 +199,7 @@ class StaticCurveNode {
         marker.pose.orientation.w = 1.0;
         marker.id =k;
         marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-        marker.scale.z = 0.15;
+        marker.scale.z = 0.1;
         marker.color.b = 1.0f;
         marker.color.g = 1.0f;
         marker.color.r = 1.0f;

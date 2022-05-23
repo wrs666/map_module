@@ -7,6 +7,7 @@
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <visualization_msgs/Marker.h>
 #include <std_srvs/Trigger.h>
 #include <map_module/curve.h>
 #include <map_module/curvepoint.h>
@@ -27,6 +28,7 @@ class MapServerNode {
     get_curve_server_ = this->nh_.advertiseService("/get_curve", &MapServerNode::getCurveCallback, this);
     visual_path_pub = nh.advertise<nav_msgs::Path>("/visual_path",1);
     ROS_INFO("map_server_node preparation finished");
+    ros::Publisher marker_pub = nh_.advertise<visualization_msgs::Marker>("path_kappa_information", 10);
   }
 
   map_module::curve csv_to_curve(){
@@ -119,20 +121,58 @@ class MapServerNode {
     response.current_pose_state = map_module::get_curveResponse::NORMAL;
     response.status = map_module::get_curveResponse::SUCCEED;
 
+    //在rviz中进行路径的可视化
     std_msgs::Header header;
     geometry_msgs::PoseStamped posestamped;
+    geometry_msgs::Point p;
     header.frame_id = "world";
-      //visual_path.header.stamp = ;
     visual_path.header = header;
-    //static_curve_srv.request.mode = map_module::path_planningRequest::STATICCURVE;
+
+    visualization_msgs::Marker points, line_strip, line_list;
+    points.header.frame_id = line_strip.header.frame_id = line_list.header.frame_id = "world";
+    points.header.stamp = line_strip.header.stamp = line_list.header.stamp = ros::Time::now();
+    points.action = line_strip.action = line_list.action = visualization_msgs::Marker::ADD;
+    points.pose.orientation.w = line_strip.pose.orientation.w = line_list.pose.orientation.w = 1.0;
+
+    points.id = 0;
+    line_strip.id = 1;
+    line_list.id = 2;
+
+    points.type = visualization_msgs::Marker::POINTS;
+    line_strip.type = visualization_msgs::Marker::LINE_STRIP;
+    line_list.type = visualization_msgs::Marker::LINE_LIST;
+
+    line_strip.scale.x = 0.1;
+    line_list.scale.x = 0.1;
+
+        // Line strip 是蓝色
+    line_strip.color.b = 1.0;
+    line_strip.color.a = 1.0;
+
+    // Line list 为红色
+    line_list.color.r = 1.0;
+    line_list.color.a = 1.0;
+
+    double last_heading=0;;
+
     for (auto point : curve.points) {
         //static_curve_srv.request.static_curve.points.push_back(to_curvepoint(point));
       posestamped.header = header;
       posestamped.pose = to_pose(point);
       visual_path.poses.push_back(posestamped);
         //std::cout<<to_curvepoint(point)<<std::endl;
+
+      p.x = point.x;
+      p.y = point.y;
+      p.z = 0;
+      line_list.points.push_back(p);
+      
+      //计算曲率疏的端点（另一端是路径点）
+      
     }
     visual_path_pub.publish(visual_path);
+    marker_pub.publish(line_list);
+    marker_pub.publish(line_strip);
     return true;
   }
 
@@ -141,6 +181,7 @@ class MapServerNode {
   ros::NodeHandle nh_;
   ros::ServiceServer get_curve_server_;
   ros::Publisher visual_path_pub;
+  ros::Publisher marker_pub;//路径曲率信息可视化的publisher
 };
 
 

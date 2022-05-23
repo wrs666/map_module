@@ -84,12 +84,19 @@ target_link_libraries(map_server_node
 add_executable(get_curve_client_node
   src/get_curve_client.cpp
 )
+
 add_dependencies(get_curve_client_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
 
 target_link_libraries(get_curve_client_node
   ${catkin_LIBRARIES}
 )
 
+add_executable(basic_shapes
+  src/line_vis.cpp
+)
+target_link_libraries(basic_shapes
+  ${catkin_LIBRARIES}
+)
 # install(TARGETS static_curve_node
 #         RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
