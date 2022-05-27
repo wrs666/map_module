@@ -91,12 +91,16 @@ target_link_libraries(get_curve_client_node
   ${catkin_LIBRARIES}
 )
 
-add_executable(basic_shapes
-  src/line_vis.cpp
-)
-target_link_libraries(basic_shapes
-  ${catkin_LIBRARIES}
-)
+# add_executable(interval_node
+#   src/line_vis.cpp
+# )
+
+# #add_dependencies(get_curve_client_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
+
+# target_link_libraries(interval_node
+#   ${catkin_LIBRARIES}
+# )
+
 # install(TARGETS static_curve_node
 #         RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 

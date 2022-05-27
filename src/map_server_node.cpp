@@ -15,8 +15,16 @@
 #include <map_module/get_curve.h>
 #include <fstream>
 #include <unistd.h>
+#include <cmath>
+#include <vector>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
-#define path "/home/wrs/map/src/map_module/recordingpath_filtered.csv"
+#define path "/home/wrs/map/src/map_module/recordingpath_final.csv"
+#define PI 3.1415926
+
+using namespace std;
+using namespace Eigen;
 
 class MapServerNode {
 
@@ -28,7 +36,7 @@ class MapServerNode {
     get_curve_server_ = this->nh_.advertiseService("/get_curve", &MapServerNode::getCurveCallback, this);
     visual_path_pub = nh.advertise<nav_msgs::Path>("/visual_path",1);
     ROS_INFO("map_server_node preparation finished");
-    ros::Publisher marker_pub = nh_.advertise<visualization_msgs::Marker>("path_kappa_information", 10);
+    marker_pub = nh.advertise<visualization_msgs::Marker>("/path_kappa_information", 10);
   }
 
   map_module::curve csv_to_curve(){
@@ -89,12 +97,90 @@ class MapServerNode {
     return pose;
   }
 
+  map_module::curve Section_Interploration(vector<map_module::curvepoint> points)
+  {
+    map_module::curve processed_section;
+    processed_section.points.push_back(points[0]);
+    double x1, y1, theta1, kappa1, x2, y2, theta2, kappa2;
+    x1 = points[0].x;
+    y1 = points[0].y;
+    theta1 = points[0].theta;
+    kappa1 = points[0].kappa;
+    x2 = points[1].x;
+    y2 = points[1].y;
+    theta2 = points[1].theta;
+    kappa2 = points[1].kappa;
+
+    //solve AX=B
+    MatrixXd A(6,6);
+    VectorXd X(6);
+    VectorXd B(6);
+
+    A << 1, x1, pow(x1, 2), pow(x1, 3), pow(x1, 4), pow(x1, 5),
+         1, x2, pow(x2, 2), pow(x2, 3), pow(x2, 4), pow(x2, 5),
+         0, 1, 2 * x1, 3 * pow(x1, 2), 4 * pow(x1, 3), 5 * pow(x1, 4),
+         0, 1, 2 * x2, 3 * pow(x2, 2), 4 * pow(x2, 3), 5 * pow(x2, 4),
+         0, 0, 2, 6 * x1, 12 * pow(x1, 2), 20 * pow(x1, 3),
+         0, 0, 2, 6 * x2, 12 * pow(x2, 2), 20 * pow(x2, 3);
+    B << y1, y2, tan(theta1), tan(theta2), kappa1 * pow((1 + pow(tan(theta1), 2)), 1.5), kappa2 * pow((1 + pow(tan(theta2), 2)), 1.5);
+    X = A.colPivHouseholderQr().solve(B);
+  
+    double x = x1;
+    map_module:: curvepoint p;
+    VectorXd x_power(6);
+    VectorXd coef_0d(6);
+    VectorXd coef_1d(6);
+    VectorXd coef_2d(6);
+    while(x < x2)
+    {
+      x_power << 1, x, pow(x, 2), pow(x, 3), pow(x, 4), pow(x, 5);
+      coef_0d << X(0), X(1), X(2), X(3), X(4), X(5);
+      coef_1d << X(1), 2 * X(2), 3 * X(3), 4 * X(4), 5 * X(5), 0;
+      coef_2d << 2 * X(2), 6 * X(3), 12 * X(4), 20 * X(5), 0, 0;
+      p.x = x;
+      p.y = x_power.dot(coef_0d);
+      p.theta = atan(x_power.dot(coef_1d));
+      p.kappa = x_power.dot(coef_2d)/pow(1+pow(x_power.dot(coef_1d), 2), 1.5);
+      processed_section.points.push_back(p);
+      x = x + 0.1;
+    }
+
+    return processed_section;
+  } 
+
+  map_module::curve Interploration()
+  {
+    map_module::curve full_path_data;
+    map_module::curve path_data;
+    path_data = csv_to_curve();
+    int section_number = sizeof(path_data.points);
+    vector<map_module::curvepoint> section_point(2);
+    unsigned long int n1;
+    int n2;
+    for (int intervel_order = 1; intervel_order < section_number; intervel_order++)
+    {
+      section_point[0] = path_data.points[intervel_order - 1];
+      section_point[1] = path_data.points[intervel_order];
+      map_module::curve section_path_data = Section_Interploration(section_point);
+      n1 = sizeof(section_path_data.points);
+      n2 = int(n1);
+      for(int i = 0; i < n2; i++)
+        full_path_data.points.push_back(section_path_data.points.at(i));
+    
+    }
+
+    
+    return full_path_data;
+  
+  }
+
  private:
 
   bool getCurveCallback(map_module::get_curve::Request& request, map_module::get_curve::Response& response) {
 
     map_module::curve curve;
     curve = csv_to_curve();
+    //curve = Interploration();
     curve.header.seq = 1;
     curve.header.stamp = ros::Time::now();
     curve.header.frame_id = "world";
@@ -122,38 +208,39 @@ class MapServerNode {
     response.status = map_module::get_curveResponse::SUCCEED;
 
     //在rviz中进行路径的可视化
+    double curv_comb_scale = 10;
     std_msgs::Header header;
     geometry_msgs::PoseStamped posestamped;
     geometry_msgs::Point p;
     header.frame_id = "world";
     visual_path.header = header;
 
-    visualization_msgs::Marker points, line_strip, line_list;
-    points.header.frame_id = line_strip.header.frame_id = line_list.header.frame_id = "world";
-    points.header.stamp = line_strip.header.stamp = line_list.header.stamp = ros::Time::now();
-    points.action = line_strip.action = line_list.action = visualization_msgs::Marker::ADD;
-    points.pose.orientation.w = line_strip.pose.orientation.w = line_list.pose.orientation.w = 1.0;
+    visualization_msgs::Marker line_strip, line_list;
+    line_strip.header.frame_id = line_list.header.frame_id = "world";
+    line_strip.header.stamp = line_list.header.stamp = ros::Time::now();
+    line_strip.ns = line_list.ns = "points_and_lines";
+    line_strip.action = line_list.action = visualization_msgs::Marker::ADD;
+    line_strip.pose.orientation.w = line_list.pose.orientation.w = 1.0;
 
-    points.id = 0;
-    line_strip.id = 1;
-    line_list.id = 2;
+    line_strip.id = 0;
+    line_list.id = 1;
 
-    points.type = visualization_msgs::Marker::POINTS;
     line_strip.type = visualization_msgs::Marker::LINE_STRIP;
     line_list.type = visualization_msgs::Marker::LINE_LIST;
 
-    line_strip.scale.x = 0.1;
-    line_list.scale.x = 0.1;
+    line_strip.scale.x = 0.03;
+    line_list.scale.x = 0.03;
 
         // Line strip 是蓝色
-    line_strip.color.b = 1.0;
+    line_strip.color.b = 1.0f;
     line_strip.color.a = 1.0;
 
     // Line list 为红色
-    line_list.color.r = 1.0;
+    line_list.color.r = 1.0f;
     line_list.color.a = 1.0;
 
-    double last_heading=0;;
+    double last_heading = 0;
+    double radius_theta = 0;
 
     for (auto point : curve.points) {
         //static_curve_srv.request.static_curve.points.push_back(to_curvepoint(point));
@@ -168,11 +255,21 @@ class MapServerNode {
       line_list.points.push_back(p);
       
       //计算曲率疏的端点（另一端是路径点）
-      
+      if(point.theta < last_heading)
+        radius_theta = PI/2 + point.theta;
+      else 
+        radius_theta = point.theta - PI/2;
+      p.x = point.x + curv_comb_scale * fabs(point.kappa) * cos(radius_theta);
+      p.y = point.y + curv_comb_scale * fabs(point.kappa) * sin(radius_theta);
+      p.z = 0; 
+      line_strip.points.push_back(p);
+      line_list.points.push_back(p);
+      last_heading = point.theta;
     }
     visual_path_pub.publish(visual_path);
-    marker_pub.publish(line_list);
     marker_pub.publish(line_strip);
+    marker_pub.publish(line_list);
+    
     return true;
   }
 
