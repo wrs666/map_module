@@ -140,7 +140,7 @@ class MapServerNode {
       p.x = x;
       p.y = x_power.dot(coef_0d);
       p.theta = atan(x_power.dot(coef_1d));
-      p.kappa = x_power.dot(coef_2d)/pow(1+pow(x_power.dot(coef_1d), 2), 1.5);
+      p.kappa = x_power.dot(coef_2d)/pow((1+pow(x_power.dot(coef_1d), 2)), 1.5);
       processed_section.points.push_back(p);
       x = x + 0.1;
     }
@@ -155,16 +155,16 @@ class MapServerNode {
     path_data = csv_to_curve();
     int section_number = sizeof(path_data.points);
     vector<map_module::curvepoint> section_point(2);
-    unsigned long int n1;
-    int n2;
+    int n1;
+    //int n2;
     for (int intervel_order = 1; intervel_order < section_number; intervel_order++)
     {
       section_point[0] = path_data.points[intervel_order - 1];
       section_point[1] = path_data.points[intervel_order];
       map_module::curve section_path_data = Section_Interploration(section_point);
-      n1 = sizeof(section_path_data.points);
-      n2 = int(n1);
-      for(int i = 0; i < n2; i++)
+      n1 = section_path_data.points.size();
+      //n2 = int(n1);
+      for(int i = 0; i < n1; i++)
         full_path_data.points.push_back(section_path_data.points.at(i));
     
     }
@@ -179,8 +179,8 @@ class MapServerNode {
   bool getCurveCallback(map_module::get_curve::Request& request, map_module::get_curve::Response& response) {
 
     map_module::curve curve;
-    curve = csv_to_curve();
-    //curve = Interploration();
+    //curve = csv_to_curve();
+    curve = Interploration();
     curve.header.seq = 1;
     curve.header.stamp = ros::Time::now();
     curve.header.frame_id = "world";
