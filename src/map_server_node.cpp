@@ -1,30 +1,26 @@
-#include <ros/ros.h>
 #include <ros/time.h>
 #include <std_msgs/Empty.h>
 #include <std_msgs/Header.h>
 #include <std_srvs/Trigger.h>
 #include <nav_msgs/Odometry.h>
-#include <nav_msgs/Path.h>
-#include <geometry_msgs/Pose.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <visualization_msgs/Marker.h>
 #include <std_srvs/Trigger.h>
-#include <map_module/curve.h>
-#include <map_module/curvepoint.h>
-#include <map_module/path_planning.h>
 #include <map_module/get_curve.h>
-#include <fstream>
 #include <unistd.h>
-#include <cmath>
-#include <vector>
-#include <Eigen/Core>
-#include <Eigen/Dense>
 
-#define path "/home/wrs/map/src/map_module/recordingpath_final.csv"
-#define PI 3.1415926
+#include <vec_map.h>
+
+#define path "/home/wrs/map/src/map_module/generated_path.csv"
+#define osm_map_url "package://map_module/data/square_backward2.osm"
+
 
 using namespace std;
 using namespace Eigen;
+
+enum path_source
+{
+  csv_file,
+  osm_mission
+};
 
 class MapServerNode {
 
@@ -32,11 +28,13 @@ class MapServerNode {
   MapServerNode(ros::NodeHandle nh, ros::NodeHandle pnh) {
     ROS_INFO("map server node init");
     nh_ = nh;
+    map = vec_map(osm_map_url, nh_);
 
     get_curve_server_ = this->nh_.advertiseService("/get_curve", &MapServerNode::getCurveCallback, this);
-    visual_path_pub = nh.advertise<nav_msgs::Path>("/visual_path",1);
+    visual_path_pub = nh.advertise<nav_msgs::Path>("/visual_path",1);//csv路径可视化
     ROS_INFO("map_server_node preparation finished");
     marker_pub = nh.advertise<visualization_msgs::Marker>("/path_kappa_information", 10);
+    visual_path_number = 0;
   }
 
   map_module::curve csv_to_curve(){
@@ -83,9 +81,10 @@ class MapServerNode {
     std::cout << "Finished csv reading." << std::endl;
     return curve;
   }
+  
 
 
-  geometry_msgs::Pose to_pose(map_module::curvepoint point){
+  geometry_msgs::Pose curve_to_pose(map_module::curvepoint point){
     geometry_msgs::Pose pose;
     pose.position.x = point.x;
     pose.position.y = point.y;
@@ -97,90 +96,160 @@ class MapServerNode {
     return pose;
   }
 
-  map_module::curve Section_Interploration(vector<map_module::curvepoint> points)
+  map_module::curvepoint to_curvepoint(TrackPoint trackpoint)
   {
-    map_module::curve processed_section;
-    processed_section.points.push_back(points[0]);
-    double x1, y1, theta1, kappa1, x2, y2, theta2, kappa2;
-    x1 = points[0].x;
-    y1 = points[0].y;
-    theta1 = points[0].theta;
-    kappa1 = points[0].kappa;
-    x2 = points[1].x;
-    y2 = points[1].y;
-    theta2 = points[1].theta;
-    kappa2 = points[1].kappa;
+    map_module::curvepoint curvepoint;
+    curvepoint.x = trackpoint.x_;
+    curvepoint.y = trackpoint.y_;
+    curvepoint.theta = trackpoint.theta_;
+    curvepoint.kappa = trackpoint.curvature_;
+    return curvepoint;
+  }
 
-    //solve AX=B
-    MatrixXd A(6,6);
-    VectorXd X(6);
-    VectorXd B(6);
+  geometry_msgs::Pose track_to_pose(TrackPoint point){
+    geometry_msgs::Pose pose;
+    pose.position.x = point.x_;
+    pose.position.y = point.y_;
+    pose.position.z = 0;
+    pose.orientation.x = 0;
+    pose.orientation.y = 0;
+    pose.orientation.z = sin(point.theta_/2);
+    pose.orientation.w = cos(point.theta_/2);
+    return pose;
+  }
 
-    A << 1, x1, pow(x1, 2), pow(x1, 3), pow(x1, 4), pow(x1, 5),
-         1, x2, pow(x2, 2), pow(x2, 3), pow(x2, 4), pow(x2, 5),
-         0, 1, 2 * x1, 3 * pow(x1, 2), 4 * pow(x1, 3), 5 * pow(x1, 4),
-         0, 1, 2 * x2, 3 * pow(x2, 2), 4 * pow(x2, 3), 5 * pow(x2, 4),
-         0, 0, 2, 6 * x1, 12 * pow(x1, 2), 20 * pow(x1, 3),
-         0, 0, 2, 6 * x2, 12 * pow(x2, 2), 20 * pow(x2, 3);
-    B << y1, y2, tan(theta1), tan(theta2), kappa1 * pow((1 + pow(tan(theta1), 2)), 1.5), kappa2 * pow((1 + pow(tan(theta2), 2)), 1.5);
-    X = A.colPivHouseholderQr().solve(B);
-  
-    double x = x1;
-    map_module:: curvepoint p;
-    VectorXd x_power(6);
-    VectorXd coef_0d(6);
-    VectorXd coef_1d(6);
-    VectorXd coef_2d(6);
-    while(x < x2)
+  map_module::curve to_curve(vector<TrackPoint> &track)
+  {
+    map_module::curve curve;
+    map_module::curvepoint curvepoint;
+    for(lint i = 0; i < track.size(); i++)
     {
-      x_power << 1, x, pow(x, 2), pow(x, 3), pow(x, 4), pow(x, 5);
-      coef_0d << X(0), X(1), X(2), X(3), X(4), X(5);
-      coef_1d << X(1), 2 * X(2), 3 * X(3), 4 * X(4), 5 * X(5), 0;
-      coef_2d << 2 * X(2), 6 * X(3), 12 * X(4), 20 * X(5), 0, 0;
-      p.x = x;
-      p.y = x_power.dot(coef_0d);
-      p.theta = atan(x_power.dot(coef_1d));
-      p.kappa = x_power.dot(coef_2d)/pow((1+pow(x_power.dot(coef_1d), 2)), 1.5);
-      processed_section.points.push_back(p);
-      x = x + 0.1;
+      curvepoint = to_curvepoint(track[i]);
+      curve.points.push_back(curvepoint);
+    }
+    return curve;
+  }
+
+
+  void vec_map_vis()
+  {
+    map.map_visualization_pub();
+  }
+
+  int find_curve_destination(double total_length)
+  {
+    int curve_size = map.mission_curve_with_length.size();
+    cout<<"num of curve points : "<<curve_size<<endl;
+    if(total_length >= map.mission_curve_with_length.back().length_)
+      return curve_size - 1;
+    else
+    {
+      double index = total_length / map.mission_curve_with_length.back().length_ * (curve_size - 1);
+      cout<<"index of curve section destination : "<<index<<endl;
+      if(ceil(index) - index < index - floor(index))
+        return ceil(index);
+      else
+        return floor(index);
     }
 
-    return processed_section;
-  } 
+  }
 
-  map_module::curve Interploration()
+  map_module::curve refresh_curve(double required_length, geometry_msgs::PoseStamped current_pose, map_module::curve curve)
   {
-    map_module::curve full_path_data;
-    map_module::curve path_data;
-    path_data = csv_to_curve();
-    int section_number = sizeof(path_data.points);
-    vector<map_module::curvepoint> section_point(2);
-    int n1;
-    //int n2;
-    for (int intervel_order = 1; intervel_order < section_number; intervel_order++)
+    map_module::curve current_curve; 
+    int start_index = 0;
+    int n = 0;
+    //todo:判断车的位置是否在地图中
+    //todo：判断当前车的朝向是否可达终点
+    double min_distance = 100;//random assginment
+    double current_distance;
+    for(auto point : curve.points)
     {
-      section_point[0] = path_data.points[intervel_order - 1];
-      section_point[1] = path_data.points[intervel_order];
-      map_module::curve section_path_data = Section_Interploration(section_point);
-      n1 = section_path_data.points.size();
-      //n2 = int(n1);
-      for(int i = 0; i < n1; i++)
-        full_path_data.points.push_back(section_path_data.points.at(i));
-    
+      current_distance = sqrt(pow((point.x - current_pose.pose.position.x), 2) + pow((point.y - current_pose.pose.position.y), 2)); 
+      if(current_distance < min_distance)
+      {
+        min_distance = current_distance;
+        start_index = n;
+      }
+      n++;
     }
 
+    cout<<"min_distance : "<<min_distance<<endl;
+
+    double past_length = map.mission_curve_with_length[start_index].length_;
+    cout<<"start_index : "<<start_index<<endl;
+    cout<<"start length : "<< past_length <<endl;
+    double total_length = required_length + past_length;
+    int end_index = find_curve_destination(total_length);
+
+    cout<<"end_index : "<<end_index<<endl;
+
+
+    vector<map_module::curvepoint>::iterator iter;
+    auto begin_iter = curve.points.begin() + start_index;
+    auto end_iter = curve.points.begin() +  end_index + 1;
     
-    return full_path_data;
-  
+    current_curve.points.assign(begin_iter, end_iter);
+    return current_curve;
   }
 
  private:
 
   bool getCurveCallback(map_module::get_curve::Request& request, map_module::get_curve::Response& response) {
 
+    nav_msgs::Path visual_path;
+    visual_path.header.seq = 1;
+    visual_path.header.stamp = ros::Time::now();
+    visual_path.header.frame_id = "world";
+
+    curve_origin = osm_mission;
+    visual_path.poses.resize(0);
+
+    map_module::curve global_curve;
     map_module::curve curve;
-    //curve = csv_to_curve();
-    curve = Interploration();
+    if (curve_origin == csv_file)
+    {
+      curve = csv_to_curve();
+
+      //填充goal_pose
+      geometry_msgs::PoseStamped goal_pose;
+      goal_pose.header.frame_id = "world";
+      goal_pose.header.stamp = ros::Time::now();
+      goal_pose.header.seq = 1;
+      goal_pose.pose.position.x = curve.points.back().x;
+      goal_pose.pose.position.y = curve.points.back().y;
+      goal_pose.pose.position.z = 0;
+      goal_pose.pose.orientation.x = 0;
+      goal_pose.pose.orientation.y = 0;
+      goal_pose.pose.orientation.z = sin(curve.points.back().theta/2);
+      goal_pose.pose.orientation.w = cos(curve.points.back().theta/2);
+      response.goal_pose = goal_pose;
+      response.status = map_module::get_curveResponse::SUCCEED;
+    }
+    else if(curve_origin == osm_mission)
+    {
+      global_curve = to_curve(map.mission_curve);
+      curve = refresh_curve(request.request_length, request.current_pose, global_curve);
+
+      geometry_msgs::PoseStamped goal_pose;
+      goal_pose.header.frame_id = "world";
+      goal_pose.header.stamp = ros::Time::now();
+      goal_pose.header.seq = 1;
+
+      goal_pose.pose = track_to_pose(map.goal_pose);
+      response.goal_pose = goal_pose;
+      response.status = map_module::get_curveResponse::SUCCEED;
+
+    }
+    else
+    {
+      ROS_WARN("curve_origin was set wrong");
+      response.status = map_module::get_curveResponse::GOAL_UNREACHABLE;
+      return false;
+    }
+    
+    curve.points.pop_back();// ????????????bug
+    
     curve.header.seq = 1;
     curve.header.stamp = ros::Time::now();
     curve.header.frame_id = "world";
@@ -191,29 +260,16 @@ class MapServerNode {
     response.left_lane_exist = false;
     response.right_lane_exist = false;
     
-    geometry_msgs::PoseStamped goal_pose;
-    goal_pose.header.frame_id = "world";
-    goal_pose.header.stamp = ros::Time::now();
-    goal_pose.header.seq = 1;
-    goal_pose.pose.position.x = curve.points.back().x;
-    goal_pose.pose.position.y = curve.points.back().y;
-    goal_pose.pose.position.z = 0;
-    goal_pose.pose.orientation.x = 0;
-    goal_pose.pose.orientation.y = 0;
-    goal_pose.pose.orientation.z = sin(curve.points.back().theta/2);
-    goal_pose.pose.orientation.w = cos(curve.points.back().theta/2);
-    response.goal_pose = goal_pose;
-
+    //to extend
     response.current_pose_state = map_module::get_curveResponse::NORMAL;
-    response.status = map_module::get_curveResponse::SUCCEED;
 
     //在rviz中进行路径的可视化
-    double curv_comb_scale = 10;
+    double curv_comb_scale = 10;//曲率梳半径放大倍数
     std_msgs::Header header;
     geometry_msgs::PoseStamped posestamped;
     geometry_msgs::Point p;
     header.frame_id = "world";
-    visual_path.header = header;
+
 
     visualization_msgs::Marker line_strip, line_list;
     line_strip.header.frame_id = line_list.header.frame_id = "world";
@@ -241,12 +297,42 @@ class MapServerNode {
 
     double last_heading = 0;
     double radius_theta = 0;
-
-    for (auto point : curve.points) {
+    
+    int curve_size = curve.points.size();
+    //bool first_flag = true;
+    for (int i = 1; i < curve_size + 1; i++) {
+      //cout<<"curve.points size : "<<curve_size<<endl;
         //static_curve_srv.request.static_curve.points.push_back(to_curvepoint(point));
+      map_module::curvepoint point_precursor = curve.points[i - 1];
+      map_module::curvepoint point = curve.points[i];
+      map_module::curvepoint point_successor = curve.points[i + 1];
+      
       posestamped.header = header;
-      posestamped.pose = to_pose(point);
-      visual_path.poses.push_back(posestamped);
+      posestamped.pose = curve_to_pose(point);
+      visual_path.poses.push_back(posestamped);      
+      
+      double road_theta;
+      if(point.theta > PI/2)
+        road_theta = point.theta - PI;
+      else if(point.theta < -PI/2)
+        road_theta = point.theta + PI;
+      else
+        road_theta = point.theta;
+
+      int k1 = 1;
+      if(road_theta < 0)
+        k1 = -1;
+      
+      int k2 = 0;
+      Point p1(point_precursor.x, point_precursor.y);
+      Point p2(point_successor.x, point_successor.y);
+      Line chord_line(p1, p2);
+      double ref_y = chord_line.a * point.x + chord_line.b;
+      if(ref_y > point.y)
+        k2 = -1;
+      else if(ref_y < point.y)
+        k2 = 1;
+
         //std::cout<<to_curvepoint(point)<<std::endl;
 
       p.x = point.x;
@@ -255,10 +341,7 @@ class MapServerNode {
       line_list.points.push_back(p);
       
       //计算曲率疏的端点（另一端是路径点）
-      if(point.theta < last_heading)
-        radius_theta = PI/2 + point.theta;
-      else 
-        radius_theta = point.theta - PI/2;
+      radius_theta = k1 * abs(road_theta) + k2 * PI / 2;
       p.x = point.x + curv_comb_scale * fabs(point.kappa) * cos(radius_theta);
       p.y = point.y + curv_comb_scale * fabs(point.kappa) * sin(radius_theta);
       p.z = 0; 
@@ -266,6 +349,7 @@ class MapServerNode {
       line_list.points.push_back(p);
       last_heading = point.theta;
     }
+    //visual_path.poses.pop_back();//????????????????????最后一个神奇元素哪来的？？？？？？？？？？？？？？？？？
     visual_path_pub.publish(visual_path);
     marker_pub.publish(line_strip);
     marker_pub.publish(line_list);
@@ -273,12 +357,14 @@ class MapServerNode {
     return true;
   }
 
-  nav_msgs::Path visual_path;
+  path_source curve_origin;
+  int visual_path_number;
   //std::vector<TrackPoint> curve_data;
   ros::NodeHandle nh_;
   ros::ServiceServer get_curve_server_;
   ros::Publisher visual_path_pub;
   ros::Publisher marker_pub;//路径曲率信息可视化的publisher
+  vec_map map;
 };
 
 
@@ -287,9 +373,17 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "map_server_node");
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
-
+  
   MapServerNode map_server_node(nh, pnh);
-  ros::spin();
+  
+  ros::Rate loop_rate(1);
+    
+  while(ros::ok())
+  {
+    map_server_node.vec_map_vis();
+    loop_rate.sleep();
+    ros::spinOnce();
+  }
 
   return 0;
 }
