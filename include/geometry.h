@@ -21,13 +21,35 @@ class Point{
 
     double x_;
     double y_;
+
+    Point generate_Point(double a, double offset)
+    {
+      int k = 1;
+      if(a < 0)
+          k = -1;
+      double a_v = -1 / a;
+
+      double x = this->x_ + k * offset / sqrt(1 + a_v * a_v);
+      double y = this->y_ + k * offset * a_v / sqrt(1 + a_v * a_v);
+      return Point(x, y);
+    }
 };
 
+// double get_distance(Point p1, Point p2)
+// {
+//     double l;
+//     l = sqrt(pow(p2.x_ - p1.x_, 2) + pow(p2.y_ - p1.y_, 2));
+//     return l;
+// }
 
-class TrackPoint {
+
+class TrackPoint : public Point
+{
 
   public:
     TrackPoint() {}
+    //可以这么用吗
+    TrackPoint(Point p, double t, double c): Point(p), theta_(t), curvature_(c) {}
     TrackPoint(double x, double y, double t, double c) {
       x_ = x;
       y_ = y;
@@ -35,10 +57,15 @@ class TrackPoint {
       curvature_ = c;
     }
     
-    double x_;
-    double y_;
     double theta_;
     double curvature_;
+};
+
+class SegmentCenterPoint: public TrackPoint
+{  public:
+    double segment_length;
+    double d_theta;
+    int segment;
 };
 
 // struct mission_curve_with_length
@@ -60,18 +87,36 @@ class mission_curve_point: public TrackPoint
 class Line
 {
   public:
-    Point p1_;
-    Point p2_;
+    Point p1_;//shorter x
+    Point p2_;//higher x
     //y=ax+b
     double a;
     double b;
+    double length;
 
     Line() {}
-    Line(Point p1, Point p2): p1_(p1), p2_(p2)
+    Line(Point p1, Point p2)
     {
+      if(p2.x_ > p1.x_)
+      {
+        p1_ = p1;
+        p2_ = p2;
+      }
+      else
+      {
+        p1_ = p2;
+        p2_ = p1;
+      }
       a = (p2.y_ - p1.y_)/(p2.x_ - p1.x_);
       b = (p2.x_ * p1.y_ - p1.x_ * p2.y_)/(p2.x_ - p1.x_);
+      length = sqrt(pow(p1_.x_ - p2_.x_, 2) + pow(p1_.y_ - p2_.y_, 2));
     }
+
+    Point get_center()
+    {
+      return Point((p1_.x_ + p2_.x_) / 2, (p1_.y_ + p2_.y_) / 2);
+    }
+    
 
     //这样写真的可以嘛
     //以道路中心线为基准，生成车道线的几何形状，中心线以右为正，中心线以左为负。

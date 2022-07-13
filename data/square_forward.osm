@@ -1,0 +1,185 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version='0.6' generator='JOSM'>
+  <bounds minlat='34.2594156' minlon='108.6473179' maxlat='34.2604087' maxlon='108.6519527' origin='CGImap 0.8.6 (3503601 spike-07.openstreetmap.org)' />
+  <node id='-102594' action='modify' visible='true' lat='34.26094062366' lon='108.6487391676'>
+    <tag k='junction' v='yes' />
+  </node>
+  <node id='-102595' action='modify' visible='true' lat='34.26159442968' lon='108.65126550043'>
+    <tag k='junction' v='yes' />
+  </node>
+  <node id='-102596' action='modify' visible='true' lat='34.25973317821' lon='108.65205019472'>
+    <tag k='junction' v='yes' />
+  </node>
+  <node id='-102597' action='modify' visible='true' lat='34.25907935772' lon='108.64941540821'>
+    <tag k='junction' v='yes' />
+  </node>
+  <node id='-102622' action='modify' visible='true' lat='34.26151964855' lon='108.65097654215'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102682' action='modify' visible='true' lat='34.2613713357' lon='108.65135955665'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102699' action='modify' visible='true' lat='34.25994763554' lon='108.65195978147'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102713' action='modify' visible='true' lat='34.25966201741' lon='108.65176342768'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102723' action='modify' visible='true' lat='34.25915019459' lon='108.6497008679'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102724' action='modify' visible='true' lat='34.25930911036' lon='108.64933193462'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102725' action='modify' visible='true' lat='34.26071951299' lon='108.64881950296'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102726' action='modify' visible='true' lat='34.26100457469' lon='108.64898627609'>
+    <tag k='highway' v='junction_point' />
+  </node>
+  <node id='-102804' action='modify' visible='true' lat='34.26145924773' lon='108.65074315031'>
+    <tag k='lane_sequence' v='2' />
+    <tag k='mission' v='1' />
+  </node>
+  <node id='-102805' action='modify' visible='true' lat='34.26104645993' lon='108.65149652353'>
+    <tag k='lane_sequence' v='3' />
+    <tag k='mission' v='2' />
+  </node>
+  <node id='-102806' action='modify' visible='true' lat='34.25950153833' lon='108.65111672264'>
+    <tag k='lane_sequence' v='-2' />
+    <tag k='mission' v='3' />
+  </node>
+  <node id='-102807' action='modify' visible='true' lat='34.260425976' lon='108.6489261524'>
+    <tag k='lane_sequence' v='-3' />
+    <tag k='mission' v='4' />
+  </node>
+  <node id='-102808' action='modify' visible='true' lat='34.26117334747' lon='108.64963841955'>
+    <tag k='lane_sequence' v='1' />
+    <tag k='mission' v='5' />
+  </node>
+  <way id='-101924' action='modify' visible='true'>
+    <nd ref='-102597' />
+    <nd ref='-102723' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='2' />
+    <tag k='lanes:forward' v='3' />
+    <tag k='width:lanes:backward' v='3.5|4.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5|5.5' />
+  </way>
+  <way id='-101928' action='modify' visible='true'>
+    <nd ref='-102594' />
+    <nd ref='-102726' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='3' />
+    <tag k='lanes:forward' v='2' />
+    <tag k='width:lanes:backward' v='3.5|4.5|5.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5' />
+  </way>
+  <way id='-102110' action='modify' visible='true'>
+    <nd ref='-102622' />
+    <nd ref='-102595' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='3' />
+    <tag k='lanes:forward' v='2' />
+    <tag k='width:lanes:backward' v='3.5|4.5|5.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5' />
+  </way>
+  <way id='-102178' action='modify' visible='true'>
+    <nd ref='-102595' />
+    <nd ref='-102682' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='2' />
+    <tag k='lanes:forward' v='3' />
+    <tag k='width:lanes:backward' v='3.5|4.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5|5.5' />
+  </way>
+  <way id='-102185' action='modify' visible='true'>
+    <nd ref='-102682' />
+    <nd ref='-102805' />
+    <nd ref='-102699' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='2' />
+    <tag k='lanes:forward' v='3' />
+    <tag k='width:lanes:backward' v='3.5|4.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5|5.5' />
+  </way>
+  <way id='-102188' action='modify' visible='true'>
+    <nd ref='-102699' />
+    <nd ref='-102596' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='2' />
+    <tag k='lanes:forward' v='3' />
+    <tag k='width:lanes:backward' v='3.5|4.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5|5.5' />
+  </way>
+  <way id='-102195' action='modify' visible='true'>
+    <nd ref='-102713' />
+    <nd ref='-102596' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='2' />
+    <tag k='lanes:forward' v='3' />
+    <tag k='width:lanes:backward' v='3.5|4.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5|5.5' />
+  </way>
+  <way id='-102204' action='modify' visible='true'>
+    <nd ref='-102723' />
+    <nd ref='-102806' />
+    <nd ref='-102713' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='2' />
+    <tag k='lanes:forward' v='3' />
+    <tag k='width:lanes:backward' v='3.5|4.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5|5.5' />
+  </way>
+  <way id='-102208' action='modify' visible='true'>
+    <nd ref='-102725' />
+    <nd ref='-102807' />
+    <nd ref='-102724' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='3' />
+    <tag k='lanes:forward' v='2' />
+    <tag k='width:lanes:backward' v='3.5|4.5|5.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5' />
+  </way>
+  <way id='-102211' action='modify' visible='true'>
+    <nd ref='-102594' />
+    <nd ref='-102725' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='3' />
+    <tag k='lanes:forward' v='2' />
+    <tag k='width:lanes:backward' v='3.5|4.5|5.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5' />
+  </way>
+  <way id='-102214' action='modify' visible='true'>
+    <nd ref='-102726' />
+    <nd ref='-102808' />
+    <nd ref='-102804' />
+    <nd ref='-102622' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='3' />
+    <tag k='lanes:forward' v='2' />
+    <tag k='width:lanes:backward' v='3.5|4.5|5.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5' />
+  </way>
+  <way id='-102218' action='modify' visible='true'>
+    <nd ref='-102724' />
+    <nd ref='-102597' />
+    <tag k='divider' v='line' />
+    <tag k='highway' v='tertiary' />
+    <tag k='lanes:backward' v='3' />
+    <tag k='lanes:forward' v='2' />
+    <tag k='width:lanes:backward' v='3.5|4.5|5.5' />
+    <tag k='width:lanes:forward' v='3.5|4.5' />
+  </way>
+</osm>

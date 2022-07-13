@@ -18,7 +18,7 @@
 
 using namespace std;
 
-#define path "/home/wrs/map/src/map_module/data/mission_curve.csv"
+#define path "/home/wrs/map/src/map_module/data/navigation_curve.csv"
 
 class TrackPoint {
 
@@ -84,7 +84,7 @@ vector<geometry_msgs::PoseStamped> csv_to_posetrack(){
         p.pose.orientation.z = sin(theta/2);
         p.pose.orientation.w = cos(theta/2);
 
-        getline(sinn, field, ',');
+        //getline(sinn, field, ',');
 
         posetrack.push_back(p);
     }
@@ -133,6 +133,10 @@ int main(int argc, char** argv)
         if(get_curve_client.call(get_curve_srv))
         {
             std::cout<<"points : "<<get_curve_srv.response.center_lane.geometry.points.front().x<<std::endl;
+            if(get_curve_srv.response.goal_exist == true)
+              std::cout<<"goal_exist : true"<<std::endl;
+            else
+              std::cout<<"goal_exist : false"<<std::endl;
         }
         else
         {

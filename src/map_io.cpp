@@ -3,44 +3,6 @@
 int Junction::junction_sequence = 0;
 int Road::marker_id = 0;
 
-//重载运算符，以拼接vector
-template<typename T>
-vector<T> operator+ (vector<T> a, vector<T> b)
-{
-  a.insert(a.end(), b.begin(), b.end());
-  return a;
-}
-
-template <typename T>
-int sign(T value)
-{
-  if(value > 0)
-    return 1;
-  else if(value < 0)
-    return -1;
-  else
-    return 0;
-}
-
-template <typename T>
-bool in_range(T value, T border1, T border2)
-{
-  if(border1  > border2)
-    return (border1 >= value && border2 <= value);
-  else
-    return (border2 >= value && border1 <= value);
-}
-
-// template <typename T>
-// void swap(T &value1, T &value2)
-// {
-//   T store;
-//   store = value1;
-//   value1 = value2;
-//   value2 = store;
-// }
-
-
 vector<string> split(const std::string& s, char delimiter) {
   vector<string> tokens;
   string token;
@@ -55,8 +17,47 @@ Road::Road(vector<osm_point> point, keyvalue_arr props, UUID id)
 {
   this -> id_ = id;
   points = point;
-  Line geometry(point.front().p, point.back().p);
-  geometry_ = geometry;
+  geometry_list.resize(0);
+
+  //暂不考虑道路合流分流
+  //osm道路方向, -> +1    <- -1
+  //但其实这样判断不严谨，仅当一条路斜率恒正或恒负
+  //按道路方向填充路的geometry
+  int direction = sign(points.back().p.x_ - points.front().p.x_);
+
+  int point_size = points.size();
+
+  vector<osm_point>::iterator iter_last_point = points.begin();
+  vector<osm_point>::iterator iter_point = points.begin();
+  while(iter_point != points.end())
+  {
+    iter_point = find_if(iter_point, points.end(), points_find_keyvalue("highway", "road_connection"));
+    if(iter_point == points.begin())
+    {
+      ROS_WARN("road_connection just link one road");
+      continue;
+    }
+    if(iter_point != points.end())
+    {
+      Line geometry((*iter_last_point).p, (*iter_point).p);
+      if(direction == 1)
+        geometry_list.push_back(geometry);
+      else
+        geometry_list.insert(geometry_list.begin(), geometry);
+    }
+    else
+    {
+      Line geometry((*iter_last_point).p, (*(iter_point - 1)).p);
+      if(direction == 1)
+        geometry_list.push_back(geometry);
+      else
+        geometry_list.insert(geometry_list.begin(), geometry);
+      break;
+    }
+
+    iter_last_point = iter_point;
+    iter_point++;    
+  }
   
   junction_points.resize(0);
 
@@ -64,55 +65,75 @@ Road::Road(vector<osm_point> point, keyvalue_arr props, UUID id)
   //将路口点解析并添加到juntion_points成员中
   junction_path = false;
   int points_size = points.size();
+
   vector<prop>::iterator iter;
   for(int i = 0; i < points_size; i++)
   {
-    //如果是路口道路，标记
-    if(junction_path == false)
+    int props_size = points[i].props.size();
+
+    if(props_size > 0)
     {
-      iter = find_if(points[i].props.begin(), points[i].props.end(), props_find_key("junction"));
-      if(iter != points[i].props.end())
+      //如果是路口道路，标记
+      if(junction_path == false)
       {
-        junction_path = true;
-        junction = points[i];
+        iter = find_if(points[i].props.begin(), points[i].props.end(), props_find_key("junction"));
+        if(iter != points[i].props.end())
+        {
+          junction_path = true;
+          junction = points[i];
+        }
+      }
+      iter = find_if(points[i].props.begin(), points[i].props.end(), props_find_key("highway"));
+      if(iter != points[i].props.end() && (*iter).value == "junction_point") 
+      {
+        junction_points.push_back(points[i]);
       }
     }
-    iter = find_if(points[i].props.begin(), points[i].props.end(), props_find_key("highway"));
-    if(iter != points[i].props.end() && (*iter).value == "junction_point")
-      junction_points.push_back(points[i]);
   }
-    
+
+
 
   string arr_cache;
   vector<string> string_arr;
 
   vector<prop>::iterator it;
   it = find_if(props.begin(), props.end(), props_find_key("divider"));
-  divider_ = (*it).value;
+  if(it != props.end())
+    divider_ = (*it).value;
   it = find_if(props.begin(), props.end(), props_find_key("highway"));
-  highway_ = (*it).value;
+  if(it != props.end())
+    highway_ = (*it).value;
   it = find_if(props.begin(), props.end(), props_find_key("lanes:backward"));
-  lanes_backward_ = atoi((*it).value.c_str());
+  if(it != props.end())
+    lanes_backward_ = atoi((*it).value.c_str());
   it = find_if(props.begin(), props.end(), props_find_key("lanes:forward"));
-  lanes_forward_ = atoi((*it).value.c_str());
+  if(it != props.end())
+    lanes_forward_ = atoi((*it).value.c_str());
 
   width_backward_.resize(0);
   width_forward_.resize(0);
 
   it = find_if(props.begin(), props.end(), props_find_key("width:lanes:backward"));
-  arr_cache = (*it).value.c_str();
-  string_arr = split(arr_cache, '|');
-  for(lint i = 0; i < string_arr.size(); i++)
+  if(it != props.end())
   {
-    width_backward_.push_back(atof(string_arr[i].c_str()));
+    arr_cache = (*it).value.c_str();
+    string_arr = split(arr_cache, '|');
+    for(lint i = 0; i < string_arr.size(); i++)
+    {
+      width_backward_.push_back(atof(string_arr[i].c_str()));
+    }
   }
 
+
   it = find_if(props.begin(), props.end(), props_find_key("width:lanes:forward"));
-  arr_cache = (*it).value.c_str();
-  string_arr = split(arr_cache, '|');
-  for(lint i = 0; i < string_arr.size(); i++)
+  if(it != props.end())
   {
-    width_forward_.push_back(atof(string_arr[i].c_str()));
+    arr_cache = (*it).value.c_str();
+    string_arr = split(arr_cache, '|');
+    for(lint i = 0; i < string_arr.size(); i++)
+    {
+      width_forward_.push_back(atof(string_arr[i].c_str()));
+    }
   }
 
 }
@@ -122,97 +143,108 @@ void Road::road_add_vis_info(visualization_msgs::MarkerArray &map)
   if(this -> junction_path == true)
     return;
   else{
-    geometry_msgs::Point p1, p2;
-
-    //生成道路中心线
-    visualization_msgs::Marker line_list;
-    line_list.header.frame_id = "world";
-    //line_list.header.stamp = ros::Time::now();
-    //line_list.ns = "points_and_lines";
-    line_list.action = visualization_msgs::Marker::ADD;
-    line_list.pose.orientation.w = 1.0;
-    //line_list.id = id;
-    line_list.type = visualization_msgs::Marker::LINE_LIST;
-    line_list.scale.x = 0.15;
-
-    visualization_msgs::Marker center = line_list;
-    center.id = marker_id;
-    center.color.r = 1.0f;
-    center.color.g = 1.0f;
-    center.color.a = 1.0;
-
-    Line center_left = geometry_.generate_line(-0.15);
-    Line center_right = geometry_.generate_line(0.15);
-    p1.x = center_left.p1_.x_;
-    p1.y = center_left.p1_.y_;
-    p1.z = 0;
-    p2.x = center_left.p2_.x_;
-    p2.y = center_left.p2_.y_;
-    p2.z = 0;
-    center.points.push_back(p1);
-    center.points.push_back(p2);
-
-    p1.x = center_right.p1_.x_;
-    p1.y = center_right.p1_.y_;
-    p1.z = 0;
-    p2.x = center_right.p2_.x_;
-    p2.y = center_right.p2_.y_;
-    p2.z = 0;
-    center.points.push_back(p1);
-    center.points.push_back(p2);
-
-    map.markers.push_back(center);
-    marker_id++;
-
-    //添加车道线
-    visualization_msgs::Marker lane_line;
-    lane_line = line_list;
-    lane_line.id = marker_id;
-  
-    lane_line.color.r = 1.0f;
-    lane_line.color.g = 1.0f;
-    lane_line.color.b = 1.0f;
-    lane_line.color.a = 1.0;
-
-    //中心线以右
-    double offset = 0.075;
-
-    for(int i = 0; i < lanes_forward_; i++)
+    Line geometry_;
+    vector<Line> geo_list;
+    geo_list = geometry_list;
+    while(geo_list.size() != 0)
     {
-      Line laneline = center_right.generate_line(offset + width_forward_[i]);
-      offset = offset + width_forward_[i];
-      p1.x = laneline.p1_.x_;
-      p1.y = laneline.p1_.y_;
+      geometry_ = geo_list.back();
+      
+      geometry_msgs::Point p1, p2;
+
+      //生成道路中心线
+      visualization_msgs::Marker line_list;
+      line_list.header.frame_id = "world";
+      //line_list.header.stamp = ros::Time::now();
+      //line_list.ns = "points_and_lines";
+      line_list.action = visualization_msgs::Marker::ADD;
+      line_list.pose.orientation.w = 1.0;
+      //line_list.id = id;
+      line_list.type = visualization_msgs::Marker::LINE_LIST;
+      line_list.scale.x = 0.15;
+
+      visualization_msgs::Marker center = line_list;
+      center.id = marker_id;
+      center.color.r = 1.0f;
+      center.color.g = 1.0f;
+      center.color.a = 1.0;
+
+      Line center_left = geometry_.generate_line(-0.15);
+      Line center_right = geometry_.generate_line(0.15);
+      p1.x = center_left.p1_.x_;
+      p1.y = center_left.p1_.y_;
       p1.z = 0;
-      p2.x = laneline.p2_.x_;
-      p2.y = laneline.p2_.y_;
+      p2.x = center_left.p2_.x_;
+      p2.y = center_left.p2_.y_;
       p2.z = 0;
-      lane_line.points.push_back(p1);
-      lane_line.points.push_back(p2);
+      center.points.push_back(p1);
+      center.points.push_back(p2);
+
+      p1.x = center_right.p1_.x_;
+      p1.y = center_right.p1_.y_;
+      p1.z = 0;
+      p2.x = center_right.p2_.x_;
+      p2.y = center_right.p2_.y_;
+      p2.z = 0;
+      center.points.push_back(p1);
+      center.points.push_back(p2);
+
+      map.markers.push_back(center);
+      marker_id++;
+
+      //添加车道线
+      visualization_msgs::Marker lane_line;
+      lane_line = line_list;
+      lane_line.id = marker_id;
+    
+      lane_line.color.r = 1.0f;
+      lane_line.color.g = 1.0f;
+      lane_line.color.b = 1.0f;
+      lane_line.color.a = 1.0;
+
+      //中心线以右
+      double offset = 0.075;
+
+      for(int i = 0; i < lanes_forward_; i++)
+      {
+        Line laneline = center_right.generate_line(offset + width_forward_[i]);
+        offset = offset + width_forward_[i];
+        p1.x = laneline.p1_.x_;
+        p1.y = laneline.p1_.y_;
+        p1.z = 0;
+        p2.x = laneline.p2_.x_;
+        p2.y = laneline.p2_.y_;
+        p2.z = 0;
+        lane_line.points.push_back(p1);
+        lane_line.points.push_back(p2);
+
+      }
+
+      //中心线以左
+      offset = -0.075;
+
+      for(int i = 0; i < lanes_backward_; i++)
+      {
+
+        Line laneline = center_left.generate_line(offset - width_backward_[i]);
+        offset = offset - width_backward_[i];
+        p1.x = laneline.p1_.x_;
+        p1.y = laneline.p1_.y_;
+        p1.z = 0;
+        p2.x = laneline.p2_.x_;
+        p2.y = laneline.p2_.y_;
+        p2.z = 0;
+        lane_line.points.push_back(p1);
+        lane_line.points.push_back(p2);
+
+      }
+
+
+      map.markers.push_back(lane_line);
+      marker_id++;
+      geo_list.pop_back();
 
     }
-
-    //中心线以左
-    offset = -0.075;
-
-    for(int i = 0; i < lanes_backward_; i++)
-    {
-
-      Line laneline = center_left.generate_line(offset - width_backward_[i]);
-      offset = offset - width_backward_[i];
-      p1.x = laneline.p1_.x_;
-      p1.y = laneline.p1_.y_;
-      p1.z = 0;
-      p2.x = laneline.p2_.x_;
-      p2.y = laneline.p2_.y_;
-      p2.z = 0;
-      lane_line.points.push_back(p1);
-      lane_line.points.push_back(p2);
-
-    }
-
-    map.markers.push_back(lane_line);
-    marker_id++;
   }
 }
 
@@ -242,62 +274,21 @@ void Junction::junctions_add_vis_info(visualization_msgs::MarkerArray &junctions
   junctions_map.markers.push_back(marker);
 }
 
-//得到某个任务点相对于道路中心线的offset
-double vec_map::get_mission_point_offset(mission_point p, Road road)
-{
-  cout<<"in function get_mission_point_offset"<<endl;
-  double offset;
-  if(p.lane_sequence > 0)
-  {
-    offset = 0.075;
-    for(int i = 0; i < p.lane_sequence; i++)
-    {
-      offset = offset + road.width_forward_[i];
-    }
-    offset = offset - road.width_forward_[p.lane_sequence - 1] / 2;
-  }
-
-  else if(p.lane_sequence < 0)
-  {
-    offset = -0.075;
-    for(int i = 0; i > p.lane_sequence; i--)
-    {
-      offset = offset - road.width_backward_[-i];
-    }
-    offset = offset + road.width_backward_[-p.lane_sequence - 1] / 2;
-  }
-
-  else
-  {
-    ROS_INFO("Wrong lane_sequence of mission_point: it can't be zero.");
-    offset = 0;
-  }
-
-  cout<<"out function get_mission_point_offset"<<endl;
-  return offset;
-}
-
 //地图上两点之间生成直线路径
-vector<TrackPoint> vec_map::get_curve_line(osm_point p1, osm_point p2, double offset , double &layback)//
+vector<map_module::curvepoint> vec_map::get_curve_line(Point p1, Point p2, double offset, vector<double> border, double &layback)//
 {
-  cout << "this layback is : "<< layback << endl;
-  //cout<<"in function get_curve_line"<<endl;
-  //生成路径几何形状
-  // cout<<"line p1 -- x1 :"<<p1.p.x_<<" y1 : "<<p1.p.y_<<endl;
-  // cout<<"line p2 -- x2 :"<<p2.p.x_<<" y2 : "<<p2.p.y_<<endl;
-  Line center_line(p1.p, p2.p);
+  Line center_line(p1, p2);
   Line curve_line = center_line.generate_line(offset);
-  vector<TrackPoint> curve_points;
+  vector<map_module::curvepoint> curve_points;
   curve_points.resize(0);
 
-  cout<<"line p1 -- x1 :"<<curve_line.p1_.x_<<" y1 : "<<curve_line.p1_.y_<<endl;
-  cout<<"line p2 -- x2 :"<<curve_line.p2_.x_<<" y2 : "<<curve_line.p2_.y_<<endl;
+  std::cout<<"line p1 -- x1 :"<<curve_line.p1_.x_<<" y1 : "<<curve_line.p1_.y_<<endl;
+  std::cout<<"line p2 -- x2 :"<<curve_line.p2_.x_<<" y2 : "<<curve_line.p2_.y_<<endl;
   
   //采样
-  int k =sign(p2.p.x_ - p1.p.x_);
-  cout<<"kkkkkk : "<<k<<endl;
+  int k =sign(p2.x_ - p1.x_);
   //double x, y;
-  TrackPoint p;
+  map_module::curvepoint p;
   double theta = atan(curve_line.a);
   if(k < 0)
     if(theta > 0)
@@ -307,168 +298,42 @@ vector<TrackPoint> vec_map::get_curve_line(osm_point p1, osm_point p2, double of
 
   double x_margin = point_margin * cos(atan(curve_line.a));
   double x_layback = layback * cos(atan(curve_line.a));
-  cout <<"x_margin = " << x_margin << endl;
-  for(double x = curve_line.p1_.x_ + k * (x_margin - x_layback); in_range(x, curve_line.p1_.x_, curve_line.p2_.x_); x = x + x_margin * k)
+  double x;
+  if(k > 0)
+    x = curve_line.p1_.x_;
+  else
+    x = curve_line.p2_.x_;
+  
+  x = x + k * (x_margin - x_layback);
+  for(; in_range(x, curve_line.p1_.x_, curve_line.p2_.x_); x = x + x_margin * k)
   {
-    curve_points.emplace_back(x, curve_line.a * x + curve_line.b, theta, 0);
+    map_module::curvepoint curve_point;
+    curve_point.x = x;
+    curve_point.y = curve_line.a * x + curve_line.b;
+    curve_point.theta = theta;
+    curve_point.kappa = 0;
+    curve_point.left_distance = border[0];
+    curve_point.right_distance = border[1];
+    curve_points.push_back(curve_point);
     mission_curve_with_length.emplace_back(x, curve_line.a * x + curve_line.b, theta, 0, curve_length);
     curve_length = curve_length + point_margin;
   }
-  cout<<"Now the curve_length is accumulated to : "<<curve_length<<endl;
-  double x_gap = curve_line.p2_.x_ - curve_points.back().x_;
-  double y_gap = curve_line.p2_.y_ - curve_points.back().y_;
+  std::cout<<"Now the curve_length is accumulated to : "<<curve_length<<endl;
+
+  Point line_last_point;
+  if(k > 0)
+    line_last_point = curve_line.p2_;
+  else
+    line_last_point = curve_line.p1_;
+  double x_gap = line_last_point.x_ - curve_points.back().x;
+  double y_gap = line_last_point.y_ - curve_points.back().y;
   layback = sqrt(pow(x_gap,2) + pow(y_gap, 2));
-  cout << "next layback is : "<< layback << endl;
-  //cout<<"out function get_curve_line"<<endl;
   return curve_points;  
 }
 
-//几何上两点之间五次样条插值出一段路径
-vector<TrackPoint> vec_map::Section_Interploration(TrackPoint p1, TrackPoint p2, int kdxdy[], double &layback)
-{ 
-  //cout<<"in function Section_Interploration"<<endl;
-  cout << "this layback is : "<< layback << endl;
-  //double length = 0;
-  vector<TrackPoint> curve_points;
-  curve_points.resize(0);
-  //curve_points.push_back(p1);
-
-  double x1, y1, theta1, kappa1, x2, y2, theta2, kappa2;
-  x1 = p1.x_;
-  y1 = p1.y_;
-  theta1 = p1.theta_;
-  kappa1 = p1.curvature_;
-  x2 = p2.x_;
-  y2 = p2.y_;
-  theta2 = p2.theta_;
-  kappa2 = p2.curvature_;
-
-  // if(kdxdy[1] * kdxdy[3] > 0 && kdxdy[0] * kdxdy[2] < 0)
-  // {
-  //   swap(x1, y1);
-  //   swap(x2, y2);
-  //   theta1 = atan(1/tan(theta1));
-  //   theta2 = atan(1/tan(theta2));
-  //   //todo: deal with curvature
-  // }
-
-  cout<<"x1, y1, theta1 : "<< x1 << " " << y1 << " " << theta1 <<endl;
-  cout<<"x2, y2, theta2 : "<< x2 << " " << y2 << " " << theta2 <<endl;
-
-  //solve AX=B
-  MatrixXd A(6,6);
-  VectorXd X(6);
-  VectorXd B(6);
-
-  A << 1, x1, pow(x1, 2), pow(x1, 3), pow(x1, 4), pow(x1, 5),
-      1, x2, pow(x2, 2), pow(x2, 3), pow(x2, 4), pow(x2, 5),
-      0, 1, 2 * x1, 3 * pow(x1, 2), 4 * pow(x1, 3), 5 * pow(x1, 4),
-      0, 1, 2 * x2, 3 * pow(x2, 2), 4 * pow(x2, 3), 5 * pow(x2, 4),
-      0, 0, 2, 6 * x1, 12 * pow(x1, 2), 20 * pow(x1, 3),
-      0, 0, 2, 6 * x2, 12 * pow(x2, 2), 20 * pow(x2, 3);
-  // B << y1, y2, tan(theta1), tan(theta2), kappa1 * pow((1 + pow(tan(theta1), 2)), 1.5), kappa2 * pow((1 + pow(tan(theta2), 2)), 1.5);
-  B << y1, y2, tan(theta1), tan(theta2), 0, 0;
-  X = A.lu().solve(B);
-  cout<<"X : "<<X(0)<<" "<<X(1)<<" "<<X(2)<<" "<<X(3)<<" "<<X(4)<<" "<<X(5)<<endl;
-
-  
-  TrackPoint p;
-  VectorXd x_power(6);
-  VectorXd coef_0d(6);
-  VectorXd coef_1d(6);
-  VectorXd coef_2d(6);      
-  
-  coef_0d << X(0), X(1), X(2), X(3), X(4), X(5);
-  coef_1d << X(1), 2 * X(2), 3 * X(3), 4 * X(4), 5 * X(5), 0;
-  coef_2d << 2 * X(2), 6 * X(3), 12 * X(4), 20 * X(5), 0, 0;
-
-  //验证连接处曲率是否连续
-  VectorXd x1_power(6);
-  VectorXd x2_power(6);
-  VectorXd x1_series(6);
-  VectorXd x2_series(6);
-  x1_power << 1, x1, pow(x1, 2), pow(x1, 3), pow(x1, 4), pow(x1, 5);
-  x2_power << 1, x2, pow(x2, 2), pow(x2, 3), pow(x2, 4), pow(x2, 5);
-  x1_series << A(4,0), A(4,1), A(4,2), A(4,3), A(4,4), A(4,5);
-  x2_series << A(5,0), A(5,1), A(5,2), A(5,3), A(5,4), A(5,5);
-  // x1_series << A(0,0), A(0,1), A(0,2), A(0,3), A(0,4), A(0,5);
-  // x2_series << A(1,0), A(1,1), A(1,2), A(1,3), A(1,4), A(1,5);
-  // x1_series << A(2,0), A(2,1), A(2,2), A(2,3), A(2,4), A(2,5);
-  // x2_series << A(3,0), A(3,1), A(3,2), A(3,3), A(3,4), A(3,5);
-
-
-  double kappa_start = x1_power.dot(coef_2d)/pow((1+pow(x1_power.dot(coef_1d), 2)), 1.5); 
-  double kappa_end = x2_power.dot(coef_2d)/pow((1+pow(x2_power.dot(coef_1d), 2)), 1.5);
-
-  // double y1dd_gap = x1_series.dot(X);
-  // double y2dd_gap = x2_series.dot(X);
-
-  // cout<<"y1dd gap : "<< y1dd_gap<<endl;
-  // cout<<"y2dd_gap : "<< y2dd_gap<<endl;
-
-  // double kappa_start = x1_power.dot(coef_2d); 
-  // double kappa_end = x2_power.dot(coef_2d);
-
-  cout<<"kappa_start : "<< kappa_start<<endl;
-  cout<<"kappa_end : "<<kappa_end<<endl;
-  
-  double x = x1;  
-
-  int k =sign(x2 - x1);
-
-  x = x + k * (point_margin - layback);
-
-  double dlength = 0.01;
-  double dx;
-
-  
-  while(in_range(x, x1, x2))
-  {
-    x_power << 1, x, pow(x, 2), pow(x, 3), pow(x, 4), pow(x, 5);
-    p.x_ = x;
-    p.y_ = x_power.dot(coef_0d);
-    p.theta_ = atan(x_power.dot(coef_1d));
-    p.curvature_ = x_power.dot(coef_2d)/pow((1+pow(x_power.dot(coef_1d), 2)), 1.5);
-
-    if(kdxdy[1] * kdxdy[3] > 0 && kdxdy[0] * kdxdy[2] < 0)
-    {
-      swap(p.x_, p.y_);
-      p.theta_ = atan(1/x_power.dot(coef_1d));
-      //p.curvature_ = (-p.curvature_);
-      //todo: deal with curvature
-    }
-
-    curve_points.push_back(p);
-    mission_curve_with_length.emplace_back(p, curve_length);
-    curve_length = curve_length + point_margin;
-
-    for(int i = 0; i < 10; i++)
-    {
-      x_power << 1, x, pow(x, 2), pow(x, 3), pow(x, 4), pow(x, 5);
-      dx = dlength / sqrt(1+pow(x_power.dot(coef_1d), 2));
-      x = x + k * dx;
-      if(!in_range(x, x1, x2))
-      {
-        break;
-      }
-        
-    }
-
-  }
- 
-  cout<<"Now the curve_length is accumulated to : "<<curve_length<<endl;
-
-  double x_gap = p2.x_ - curve_points.back().x_;
-  double y_gap = p2.y_ - curve_points.back().y_;
-  layback = sqrt(pow(x_gap,2) + pow(y_gap, 2));
-  cout << "next layback is : "<< layback << endl;
-  //cout<<"out function Section_Interploration"<<endl;
-  return curve_points;
-}
-
-vector<TrackPoint> vec_map::spline_interploration(TrackPoint p1, TrackPoint p2, double &layback)
+vector<map_module::curvepoint> vec_map::spline_interploration(TrackPoint p1, TrackPoint p2, vector<double> border, double &layback)
 {
-  vector<TrackPoint> curve_points;
+  vector<map_module::curvepoint> curve_points;
   curve_points.resize(0);
   //curve_points.push_back(p1);
 
@@ -482,12 +347,10 @@ vector<TrackPoint> vec_map::spline_interploration(TrackPoint p1, TrackPoint p2, 
   theta2 = p2.theta_;
   kappa2 = p2.curvature_;
 
-  cout<<"x1, y1, theta1 : "<< x1 << " " << y1 << " " << theta1 <<endl;
-  cout<<"x2, y2, theta2 : "<< x2 << " " << y2 << " " << theta2 <<endl;
+  std::cout<<"x1, y1, theta1 : "<< x1 << " " << y1 << " " << theta1 <<endl;
+  std::cout<<"x2, y2, theta2 : "<< x2 << " " << y2 << " " << theta2 <<endl;
   
   double s_distance = sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
-
-  cout<<"SSSSSSS : "<<s_distance<<endl;
 
   double vx1, vx2, vy1, vy2, ax1, ax2, ay1,ay2;
   vx1 = cos(theta1);
@@ -517,9 +380,6 @@ vector<TrackPoint> vec_map::spline_interploration(TrackPoint p1, TrackPoint p2, 
 
   double kappa_start = (vx1 * ay1 - ax1 * vy1) / pow( (pow(vx1, 2) + pow(vy1, 2) ), 1.5);
   double kappa_end = (vx2 * ay2 - ax2 * vy2) / pow( (pow(vx2, 2) + pow(vy2, 2) ), 1.5);
-
-  cout<<"kappa_start : "<< kappa_start<<endl;
-  cout<<"kappa_end : "<<kappa_end<<endl;
 
   double s = point_margin - layback;
   TrackPoint p;
@@ -564,21 +424,27 @@ vector<TrackPoint> vec_map::spline_interploration(TrackPoint p1, TrackPoint p2, 
 
     p.curvature_ = (vx * ay - ax * vy) / pow( (pow(vx, 2) + pow(vy, 2) ), 1.5);
 
-    curve_points.push_back(p);
+
+    map_module::curvepoint cp;
+    cp.x = p.x_;
+    cp.y = p.y_;
+    cp.theta = p.theta_;
+    cp.kappa = p.curvature_;
+    cp.left_distance = border[0];
+    cp.right_distance = border[1];
+    curve_points.push_back(cp);
     curve_length = curve_length + point_margin;
     mission_curve_with_length.emplace_back(p, curve_length);
 
-    s = s + point_margin;
+    s = s + point_margin * 0.9;//2*2^1/2 / PI = 0.9003.....
   }
   
  
-  cout<<"Now the curve_length is accumulated to : "<<curve_length<<endl;
+  std::cout<<"Now the curve_length is accumulated to : "<<curve_length<<endl;
 
-  double x_gap = p2.x_ - curve_points.back().x_;
-  double y_gap = p2.y_ - curve_points.back().y_;
+  double x_gap = p2.x_ - curve_points.back().x;
+  double y_gap = p2.y_ - curve_points.back().y;
   layback = sqrt(pow(x_gap,2) + pow(y_gap, 2));
-  cout << "next layback is : "<< layback << endl;
-  //cout<<"out function Section_Interploration"<<endl;
   return curve_points;
 
 }
@@ -586,9 +452,8 @@ vector<TrackPoint> vec_map::spline_interploration(TrackPoint p1, TrackPoint p2, 
 //vector<double> get
 
 //地图上两点之间生成五次样条曲线
-vector<TrackPoint> vec_map::get_curve_spline(osm_point p1, osm_point p2, double offset1, double offset2, int kdxdy[], double a1, double a2, double &layback)
+vector<map_module::curvepoint> vec_map::get_curve_spline(Point p1, Point p2, double offset1, double offset2, int kdxdy[], double a1, double a2, vector<double> border, double &layback)
 {
-  //cout<<"in function get_curve_spline"<<endl;
   double a1_ = -1 / a1;
   double a2_ = -1 / a2;
   int k1 = 1;
@@ -598,12 +463,11 @@ vector<TrackPoint> vec_map::get_curve_spline(osm_point p1, osm_point p2, double 
   if(a2 < 0)
     k2 = -1;
 
-  double x1 = p1.p.x_ + k1 * offset1 / sqrt(1 + a1_ * a1_);
-  double x2 = p2.p.x_ + k2 * offset2 / sqrt(1 + a2_ * a2_);
-  double y1 = p1.p.y_ + k1 * offset1 * a1_ / sqrt(1 + a1_ * a1_);
-  double y2 = p2.p.y_ + k2 * offset2 * a2_ / sqrt(1 + a2_ * a2_);
+  double x1 = p1.x_ + k1 * offset1 / sqrt(1 + a1_ * a1_);
+  double x2 = p2.x_ + k2 * offset2 / sqrt(1 + a2_ * a2_);
+  double y1 = p1.y_ + k1 * offset1 * a1_ / sqrt(1 + a1_ * a1_);
+  double y2 = p2.y_ + k2 * offset2 * a2_ / sqrt(1 + a2_ * a2_);
 
-  //cout<<"out function get_curve_spline"<<endl;
   //还真可以这么写？
   double theta1, theta2;
   if(kdxdy[0] < 0)
@@ -622,32 +486,105 @@ vector<TrackPoint> vec_map::get_curve_spline(osm_point p1, osm_point p2, double 
   else
     theta2 = atan(a2);
   //return Section_Interploration(TrackPoint(x1, y1, theta1, 0), TrackPoint(x2, y2, theta2, 0), kdxdy, layback);
-  return spline_interploration(TrackPoint(x1, y1, theta1, 0), TrackPoint(x2, y2, theta2, 0), layback);
+  return spline_interploration(TrackPoint(x1, y1, theta1, 0), TrackPoint(x2, y2, theta2, 0), border, layback);
 
+}
+
+vector<double> get_border(Road road, mission_point p)
+{
+  vector<double> border;
+  border.resize(0);
+  double left_distance = 0;
+  double right_distance = 0;
+  int k = p.lane_sequence;
+  if(k > 0)
+  {
+    if(k > road.width_forward_.size())
+    {
+      ROS_ERROR("mission lane_sequence is out of the range.");
+      //默认道路宽度 3
+      left_distance = 1.5;
+      right_distance = 1.5;
+    }
+    else
+    {
+      double lane_width = road.width_forward_[k - 1];
+      left_distance = lane_width / 2;
+      right_distance = lane_width / 2;
+    }
+  }
+  else if(k < 0)
+  {
+    if(abs(k) > road.width_backward_.size())
+    {
+      ROS_ERROR("mission lane_sequence is out of the range.");
+      //默认道路宽度 3
+      left_distance = 1.5;
+      right_distance = 1.5;
+    }
+    else
+    {
+      double lane_width = road.width_backward_[abs(k) - 1];
+      left_distance = lane_width / 2;
+      right_distance = lane_width / 2;
+    }
+  }
+  else
+  {
+    ROS_ERROR("lane_sequence should not be ZERO");
+  }
+  
+  border.push_back(left_distance);
+  border.push_back(right_distance);
+  return border;
 }
 
 
 
+
 //两个任务点之间生成一段路径
-vector<TrackPoint> vec_map::get_curve_between_mission(mission_point p1, mission_point p2, double &layback)
+vector<map_module::curvepoint> vec_map::get_curve_between_mission(mission_point p1, mission_point p2, double &layback)
 {
 
   int k_dx_dy[4];
-  cout<<"in function get_curve_between_mission"<<endl;
-  vector<TrackPoint> raw_curve_section;
+  vector<map_module::curvepoint> raw_curve_section;
   raw_curve_section.resize(0);
   //找到任务点所在的路
   vector<Road>:: iterator iter_former, iter_latter;
   iter_former = find_if(roads.begin(), roads.end(), roads_find_id(p1.id));
   iter_latter = find_if(roads.begin(), roads.end(), roads_find_id(p2.id));
+  vector<double> border_p1 = {0, 0};
+  border_p1 = get_border((*iter_former), p1);
+  if(border_p1.size() != 2)
+  {
+    ROS_ERROR("wrong curvepoint border calculated ");
+    border_p1 = {1.5, 1.5};
+  }
+
+  vector<double> border_p2 = {0, 0};
+  border_p2 = get_border((*iter_latter), p2);
+  if(border_p2.size() != 2)
+  {
+    ROS_ERROR("wrong curvepoint border calculated ");
+    border_p2 = {1.5, 1.5};
+  }
+ 
+  //路口路径边界默认值
+  //vector<double> border_junction = {2.5, 2.5};
+
+
   //路径基于道路中心线的offset
   double offset1, offset2;
-  offset1 = get_mission_point_offset(p1, (*iter_former));
-  offset2 = get_mission_point_offset(p2, (*iter_latter));
+  offset1 = iter_former->get_mission_point_offset(p1.lane_sequence);
+  offset2 = iter_latter->get_mission_point_offset(p2.lane_sequence);
+  
+  //任务点标在最后一段路上 
+  //暂且最多只能应对道路有至多两个路段
+  double a1 = (*iter_former).geometry_list.back().a;
+  double a2 = (*iter_latter).geometry_list.back().a;
 
-  double a1 = (*iter_former).geometry_.a;
-  double a2 = (*iter_latter).geometry_.a;
-
+  
+  double a2s = (*iter_latter).geometry_list.front().a;
 
   //确定连接两条道路的路口
   Junction junction;
@@ -671,9 +608,24 @@ vector<TrackPoint> vec_map::get_curve_between_mission(mission_point p1, mission_
           k_dx_dy[1] = sign(junction_point1.p.y_ - p1.p.y_);
           k_dx_dy[2] = sign(p2.p.x_ - junction_point2.p.x_);
           k_dx_dy[3] = sign(p2.p.y_ - junction_point2.p.y_);
-          raw_curve_section = get_curve_line(p1, junction_point1, offset1, layback);
-          raw_curve_section = raw_curve_section + get_curve_spline(junction_point1, junction_point2, offset1, offset2, k_dx_dy, a1, a2, layback);
-          raw_curve_section = raw_curve_section + get_curve_line(junction_point2, p2, offset2, layback);
+    
+          raw_curve_section = get_curve_line(p1.p, junction_point1.p, offset1, border_p1, layback);
+          raw_curve_section = raw_curve_section + get_curve_spline(junction_point1.p, junction_point2.p, offset1, offset2, k_dx_dy, a1, a2s, border_junction, layback);
+          if(a2 == a2s)
+            raw_curve_section = raw_curve_section + get_curve_line(junction_point2.p, p2.p, offset2, border_p2, layback);
+          else
+          {
+            //仅仅是对创新港地图的特殊处理
+            int special_sign = sign(p2.p.x_ - junction_point2.p.x_);
+            k_dx_dy[0] = special_sign;
+            k_dx_dy[1] = special_sign;
+            k_dx_dy[2] = special_sign;
+            k_dx_dy[4] = special_sign;
+            if(special_sign > 0)
+              raw_curve_section = raw_curve_section + get_curve_spline(junction_point2.p, p2.p, offset2, offset2, k_dx_dy, a2s, a2, border_p2, layback);
+            else
+              raw_curve_section = raw_curve_section + get_curve_spline(junction_point2.p, p2.p, offset2, offset2, k_dx_dy, a2, a2s, border_p2, layback);
+          }
           break;
         }
       }
@@ -687,7 +639,6 @@ vector<TrackPoint> vec_map::get_curve_between_mission(mission_point p1, mission_
   if(raw_curve_section.size() == 0)
     ROS_WARN("No curve generate between this two mission_points.");
 
-  cout<<"out function get_curve_between_mission"<<endl;
   return raw_curve_section;
 }
 
@@ -697,19 +648,18 @@ vector<TrackPoint> vec_map::get_curve_between_mission(mission_point p1, mission_
 //construct junctions;
 void vec_map::resolve_points()
 {
+  global_points.resize(0);
   int points_num = raw_map.points.size();
+  mission_exist = false;
   for(int i = 0; i < points_num; i++)
   {
     geographic_msgs::WayPoint way_point = raw_map.points[i];
     geodesy::UTMPoint utm_point;
     geodesy::fromMsg(way_point.position, utm_point);
-    // cout<<"utm_point.easting: "<<utm_point.easting<<endl;
-    // cout<<"utm_point.northing: "<<utm_point.northing<<endl;
-    // cout<<"******************************"<<endl;
-    Point p(utm_point.easting - 284000, utm_point.northing - 3793000);
-    cout<<"information of points: x: "<<p.x_<<"   "<<"y: "<<p.y_<<endl;
+
+    Point p(utm_point.easting - 300000, utm_point.northing - 3800000);
     geodesy::fromMsg(way_point.position, utm_point);
-    //osm_point op(way_point.id.uuid, p, way_point.props);
+
     global_points.emplace_back(way_point.id.uuid, p, way_point.props);
     auto iter = find_if(way_point.props.begin(), way_point.props.end(), props_find_key("mission"));
     if(iter != way_point.props.end())
@@ -721,8 +671,9 @@ void vec_map::resolve_points()
       {
         int index = atoi((iter_lane -> value).c_str());        
         mission_points.emplace(atoi((*iter).value.c_str()), mission_point(way_point.id.uuid, p, way_point.props, index));
-        cout<<"**mission point info mission: "<< atoi((*iter).value.c_str())<< " lane : "<<index<<endl;
+        std::cout<<"**mission point info mission: "<< atoi((*iter).value.c_str())<< " lane : "<<index<<endl;
         ROS_INFO("Got mission point. ");
+        mission_exist = true;
       }
 
     }
@@ -739,10 +690,8 @@ void vec_map::resolve_points()
 
   }
 
-  for(auto iter = mission_points.begin(); iter != mission_points.end(); iter++)
-  {
-    cout<<"mission: "<<(*iter).first<<"  x: "<<(*iter).second.p.x_<<endl;
-  }
+  std::cout<<"*****global point size: "<<global_points.size()<<endl;
+  std::cout<<"*****mission point size: "<<mission_points.size()<<endl;
 
   ROS_INFO("FINISH point resolved.");
 }
@@ -750,6 +699,7 @@ void vec_map::resolve_points()
 //assign values to roads
 void vec_map::resolve_roads()
 {
+  roads.resize(0);
   //根据feature构建道路
   //todo 将任务点，路口点读进Road
   int feature_number = raw_map.features.size();
@@ -795,7 +745,7 @@ void vec_map::resolve_junctions()
   for(iter_junction = junctions.begin(); iter_junction != junctions.end(); iter_junction = next(iter_junction))
   {
     junction_number++;     
-    cout<<"resolving "<<junction_number<<" th junction."<<endl;
+    std::cout<<"resolving "<<junction_number<<" th junction."<<endl;
     roads_contains_junctions.resize(0);
     UUID id = (*iter_junction).junction.id;
   
@@ -803,7 +753,7 @@ void vec_map::resolve_junctions()
     while(iter_road != roads.end())
     {
       road_number++;
-      cout<<"resolving"<<road_number<<" th road of the "<<junction_number<<" th junction"<<endl;
+      ///////
       if((*iter_road).junction_points.size() == 1)
       {
         junction_point = (*iter_road).junction_points[0];
@@ -825,11 +775,13 @@ void vec_map::resolve_junctions()
           (*iter_junction).add_connection(junction_point, (*iter1));
       
       }
+      ////////
       else if((*iter_road).junction_points.size() > 1)
         ROS_WARN("Wrong_junction drawn, junction is connected to more than a juntion point in a junction path.");
       else
         ROS_WARN("Here is a isolated junction. Please add junction_point to it.");
 
+      ////////
       if(next(iter_road) != roads.end())
         iter_road = find_if(next(iter_road), roads.end(), roads_find_id(id));
       else
@@ -841,44 +793,88 @@ void vec_map::resolve_junctions()
   ROS_INFO("FINISH junctions resolved.");
 }
 
+//添加edge
+void vec_map::add_edges_in_junctions()
+{
+  vector<Junction>::iterator iter_j1 = junctions.end();
+  vector<Junction>::iterator iter_j2 = junctions.end();
+  
+  if(roads.size() == 0 || junctions.size() == 0)
+    return;
+  for(vector<Road>::iterator iter_r = roads.begin(); iter_r != roads.end(); iter_r++)
+  {
+    vector<Junction>::iterator iter_j = find_if(junctions.begin(), junctions.end(), junction_find_link_road(iter_r));
+    if(iter_j != junctions.end())
+    {
+      iter_j1 = iter_j;
+      iter_j = find_if(next(iter_j), junctions.end(), junction_find_link_road(iter_r));
+      if(iter_j != junctions.end())
+      {
+        double length = 0;
+        int n = iter_r->geometry_list.size();
+        for(int i = 0; i < n; i++)
+          length = length + iter_r->geometry_list[i].length;
+        iter_j2 = iter_j;
+        iter_j1->edge.insert(pair<double, vector<Junction>::iterator>(length, iter_j2));
+        iter_j2->edge.insert(pair<double, vector<Junction>::iterator>(length, iter_j1));
+        ROS_INFO("add this road as edge to 2 junctions");
+      }
+    }
+  }
+}
+
+//for test
+void vec_map::junction_edge_test()
+{
+  for(auto iter = junctions.begin(); iter != junctions.end(); iter++ )
+  {
+    ROS_INFO("Junction Edges Test");
+    cout<<endl;
+    cout<<"junction position x: "<<iter->junction.p.x_<<"  y: "<<iter->junction.p.y_ <<endl;
+    cout<<"the number of junction edges: "<<iter->edge.size()<<endl;
+    cout<<endl;
+  }
+
+}
+
     
 
 //由任务点(key == mission)得到路径
 //在任务点列表中，依次两点之间生成路径
-vector<TrackPoint> vec_map::generate_mission_curve()
+vector<map_module::curvepoint> vec_map::generate_mission_curve()
 {
   mission_curve_with_length.resize(0);
   curve_length = 0;
-  cout<<"in function generate_mission_curve"<<endl;
-  vector<TrackPoint> raw_curve;
-  vector<TrackPoint> raw_curve_section;
+  vector<map_module::curvepoint> raw_curve;
+  vector<map_module::curvepoint> raw_curve_section;
   raw_curve.resize(0);
-  int n = 0;
-  double lay_back = 0;
-  //按顺序依次将每两个任务点之间的路径点填充到路径中
-  for(auto iter = mission_points.begin(); next(iter) != mission_points.end(); iter++)
+  if(mission_points.size() > 0)
   {
-    n++;
-    cout<<"add path "<<n<<" th times."<<endl;
-    raw_curve_section.resize(0);
-    raw_curve_section = get_curve_between_mission((*iter).second, (*next(iter)).second, lay_back);
-    cout<<"finished one path generation."<<endl;
-    raw_curve.insert(raw_curve.end(), raw_curve_section.begin(), raw_curve_section.end());
-    cout<<"finished insert this path."<<endl;
+    int n = 0;
+    double lay_back = 0;
+    //按顺序依次将每两个任务点之间的路径点填充到路径中
+    for(auto iter = mission_points.begin(); next(iter) != mission_points.end(); iter++)
+    {
+      n++;
+      raw_curve_section.resize(0);
+      raw_curve_section = get_curve_between_mission((*iter).second, (*next(iter)).second, lay_back);
+      raw_curve.insert(raw_curve.end(), raw_curve_section.begin(), raw_curve_section.end());
+    }
+    
+    osm_point goal_point = mission_points.at(mission_points.size() - 1);
+
+    vector<Road>::iterator iter_goal_road = find_if(roads.begin(), roads.end(), roads_find_id(goal_point.id));
+
+    goal_pose.x_ = goal_point.p.x_;
+    goal_pose.y_ = goal_point.p.y_;
+    goal_pose.theta_ = atan((*iter_goal_road).geometry_list.back().a);
+    goal_pose.curvature_ = 0;
+
+    curve_length = curve_length - point_margin;
   }
-  
-  osm_point goal_point = mission_points.at(mission_points.size() - 1);
+  else
+    ROS_WARN("no mission point in map");
 
-  vector<Road>::iterator iter_goal_road = find_if(roads.begin(), roads.end(), roads_find_id(goal_point.id));
-
-  goal_pose.x_ = goal_point.p.x_;
-  goal_pose.y_ = goal_point.p.y_;
-  goal_pose.theta_ = atan((*iter_goal_road).geometry_.a);
-  goal_pose.curvature_ = 0;
-
-  curve_length = curve_length - point_margin;
-
-  cout<<"out function generate_mission_curve"<<endl;
   ROS_INFO("FINISH mission_curve resolved");
   return raw_curve;
 }
@@ -899,30 +895,62 @@ void vec_map::mission_curve_add_vis_info()
   }
 }
 
+void vec_map::navigation_curve_add_vis_info()
+{
+  //将路径信息转换成可被rviz可视化的消息类型
+  geometry_msgs::PoseStamped posestamped;
+  visual_navigation_curve.poses.resize(0);
+  visual_navigation_curve.header.frame_id = "world";
+  visual_navigation_curve.header.seq = 0;
+  visual_navigation_curve.header.stamp = ros::Time::now();
+  for (auto point : navigation_curve) {
+      //static_curve_srv.request.static_curve.points.push_back(to_curvepoint(point));
+    posestamped.header.frame_id = "world";
+    posestamped.pose = track_to_pose(point);
+    visual_navigation_curve.poses.push_back(posestamped);
+  }
+}
+
 void vec_map::store_curve_in_csv()
 {
   ofstream outFile;  
   outFile.open("/home/wrs/map/src/map_module/data/mission_curve.csv", ios::out);
   for(auto point : mission_curve)
   {
-    outFile << point.x_ << ',' << point.y_ << ',' << point.theta_ << ',' << point.curvature_ << endl;  
+    outFile << point.x << ',' << point.y << ',' << point.theta << ',' << point.kappa << ',' << point.left_distance << ',' << point.right_distance << endl;  
   }
   outFile.close(); 
 }
+
+void vec_map::store_navigation_curve()
+{
+  if(navigation_curve.size() == 0)
+    return;
+  ofstream outFile;  
+  outFile.open("/home/wrs/map/src/map_module/data/navigation_curve.csv", ios::out);
+  for(auto point : navigation_curve)
+  {
+    outFile << point.x << ',' << point.y << ',' << point.theta << ',' << point.kappa << ',' << point.left_distance << ',' << point.right_distance << endl;  
+  }
+  outFile.close(); 
+}
+
 
 
 void vec_map::map_visualization_pub()
 {
   roads_vis_pub.publish(road_map);
   mission_curve_vis_pub.publish(visual_mission_curve);
+  //navigation_curve_vis_pub.publish(visual_navigation_curve);
   junctions_vis_pub.publish(junctions_map);
 }
 
 void vec_map::resolve_map(ros::NodeHandle nh)
 {
-  roads_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("roads_vis", 1);
-  junctions_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("junction_vis", 1);
-  mission_curve_vis_pub = nh.advertise<nav_msgs::Path>("mission_curve_vis", 1);
+  roads_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("/roads_vis", 1);
+  junctions_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("/junction_vis", 1);
+  mission_curve_vis_pub = nh.advertise<nav_msgs::Path>("/mission_curve_vis", 1);
+  navigation_curve_vis_pub = nh.advertise<nav_msgs::Path>("/navigation_curve_vis", 1);
 
   road_map.markers.resize(0);
   junctions_map.markers.resize(0);
@@ -949,6 +977,10 @@ void vec_map::resolve_map(ros::NodeHandle nh)
   //对每个junction，添加与其相连的junction_point
   resolve_junctions();
 
+  add_edges_in_junctions();
+
+  junction_edge_test();
+
   //由任务点(key == mission)得到路径
   //在任务点列表中，依次两点之间生成路径
   mission_curve = generate_mission_curve();
@@ -959,52 +991,7 @@ void vec_map::resolve_map(ros::NodeHandle nh)
   ROS_INFO("curve SAVED!");
 }
 
-// void vec_map::correct_mission_curve()
-// {
-//   int n1 = mission_curve.size();
-//   cout<<"mission_curve size: "<<n1<<endl;
-//   for(int n = 0; n < n1 - 1; n++)
-//   {
-//     if(mission_curve[n].x_ > mission_curve[n+1].x_)
-//       if(mission_curve[n].theta_ > 0)
-//         mission_curve[n].theta_ = mission_curve[n].theta_ - PI;
-//       else if(mission_curve[n].theta_ < 0)
-//         mission_curve[n].theta_ = mission_curve[n].theta_ + PI;
-//   }
-//   mission_curve.pop_back();
 
-//   int n2 = mission_curve_with_length.size();
-//   cout<<"mission_curve_with_length size: "<<n2<<endl;
-//   for(int n = 0; n < n2 - 1; n++)
-//   {
-//     if(mission_curve_with_length[n].x_ > mission_curve_with_length[n+1].x_)
-//       if(mission_curve_with_length[n].theta_ > 0)
-//         mission_curve_with_length[n].theta_ = PI - abs(mission_curve_with_length[n].theta_);
-//       else if(mission_curve_with_length[n].theta_ < 0)
-//         mission_curve_with_length[n].theta_ = mission_curve_with_length[n].theta_ + PI;
-//   }
-//   mission_curve_with_length.pop_back();
-//}
-
-
-// int main(int argc, char** argv)
-// {
-//     ROS_INFO("INTO main point now");
-//     ros::init(argc, argv, "map_io_node");
-//     ros::NodeHandle nh;
-//     vec_map map(osm_map_url, nh);
-//     //可视化
-//     map.store_curve_in_csv();
-//     ros::Rate loop_rate(1);
-    
-//     while(ros::ok())
-//     {
-//       map.map_visualization_pub();
-//       loop_rate.sleep();
-//       ros::spinOnce();
-//     }
-
-// }
 
 /*
 TODO:

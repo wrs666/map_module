@@ -6,9 +6,10 @@ if(ENABLE_DEBUG)
   add_compile_options(-DENABLE_DEBUG)
 endif(ENABLE_DEBUG)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -Wall -Werror")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g -ggdb")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+add_compile_options(-std=c++11 -O0)
+SET(CMAKE_BUILD_TYPE "Debug")
+
+
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -17,6 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   visualization_msgs
   tf
+  geographic_msgs
+  geodesy
   message_generation
 )
 
@@ -52,6 +55,8 @@ catkin_package(
   geometry_msgs
   visualization_msgs
   tf
+  geographic_msgs
+  geodesy
   message_generation
   message_runtime
 )
@@ -63,20 +68,21 @@ include_directories(
 )
 
 
-add_executable(static_curve_node
-  src/static_curve_node.cpp
-)
-add_dependencies(static_curve_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
+# add_executable(static_curve_node
+#   src/static_curve_node.cpp
+# )
+# add_dependencies(static_curve_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
 
-target_link_libraries(static_curve_node
-  ${catkin_LIBRARIES}
-)
+# target_link_libraries(static_curve_node
+#   ${catkin_LIBRARIES}
+# )
 
 add_executable(map_server_node
+  src/map_io.cpp
+  src/navigation.cpp
   src/map_server_node.cpp
 )
 add_dependencies(map_server_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
-
 target_link_libraries(map_server_node
   ${catkin_LIBRARIES}
 )
@@ -84,20 +90,35 @@ target_link_libraries(map_server_node
 add_executable(get_curve_client_node
   src/get_curve_client.cpp
 )
-
 add_dependencies(get_curve_client_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
-
 target_link_libraries(get_curve_client_node
   ${catkin_LIBRARIES}
 )
 
-# add_executable(interval_node
-#   src/line_vis.cpp
+add_executable(navigation_test_node
+  src/navigation_test.cpp
+)
+add_dependencies(navigation_test_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
+target_link_libraries(navigation_test_node
+  ${catkin_LIBRARIES}
+)
+
+# add_executable(map_io_node
+#   src/map_io.cpp
+# )
+# add_dependencies(map_io_node ${catkin_EXPORTED_TARGETS} )
+
+# target_link_libraries(map_io_node
+#   ${catkin_LIBRARIES}
 # )
 
-# #add_dependencies(get_curve_client_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
+# add_executable(path_test_node
+#   src/path_test.cpp
+# )
 
-# target_link_libraries(interval_node
+# add_dependencies(path_test_node map_module_generate_messages_cpp ${catkin_EXPORTED_TARGETS} )
+
+# target_link_libraries(path_test_node
 #   ${catkin_LIBRARIES}
 # )
 
