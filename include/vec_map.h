@@ -18,7 +18,7 @@
 
 using namespace Eigen;
 
-#define PI 3.1415926
+#define PI 3.14159265359
 
 typedef long unsigned int lint;
 

@@ -11,6 +11,18 @@ double overflowing_road_range = 10;
 
 //vector<double> border_junction = {2.5, 2.5};
 
+double check_theta(double t)
+{
+  while(abs(t) > PI)
+  {
+    if(t > PI)
+      t = t - 2 * PI;
+    else if(t < -PI)
+      t = t + 2 * PI;
+  }
+  return t;
+}
+
 double get_distance(Point p1, Point p2)
 {
   double l;
@@ -581,11 +593,10 @@ vector<map_module::curvepoint> vec_map::just_go(vector<SegmentCenterPoint> cente
     width = start.road ->width_backward_[-start.lane_sequence - 1]; 
   border.push_back(width / 2);
   border.push_back(width / 2);
-  if((end.x_ - start.center_projection.x_) * (center_points.front().x_ - start.center_projection.x_) > 0)
-  { 
-    Point p = start.center_projection.generate_Point(start.road ->geometry_list[start.segment].a, start.road->get_mission_point_offset(start.lane_sequence));
+  Point p = start.center_projection.generate_Point(start.road ->geometry_list[start.segment].a, start.road->get_mission_point_offset(start.lane_sequence));
+  if((end.x_ - p.x_) * (center_points.front().x_ - p.x_) > 0) 
     curve = get_curve_line(p, center_points.front(), 0, border, layback);
-  }
+  
   
   int n = center_points.size();
   if(n > 1)
@@ -896,7 +907,12 @@ bool vec_map::get_navigation_curve(geometry_msgs::PoseStamped start_pose, geomet
       last_curve.resize(0);
       vector<map_module::curvepoint>::reverse_iterator iter_r;
       for(iter_r = last_curve_r.rbegin(); iter_r != last_curve_r.rend(); iter_r++)
+      {
+        iter_r->theta = check_theta(iter_r->theta + PI);
+        iter_r->kappa = -(iter_r->kappa);
         last_curve.push_back((*iter_r));
+      }
+        
       navigation_curve = navigation_curve + last_curve;
 
       store_navigation_curve();

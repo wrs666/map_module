@@ -244,7 +244,12 @@ class MapServerNode {
 
   bool restart_navigation(vector<map_module::curvepoint> &curve, geometry_msgs::PoseStamped current_pose)
   {
-    if(this -> nav_goal_pose != map.nav_goal.pose)
+    //因为地图会调整终点在路网的规范位置，所以不能以是否严格相等来判断终点是否发生改变
+    double devidation_allowed = 2;
+    Point p1(this -> nav_goal_pose.position.x, this -> nav_goal_pose.position.y);
+    Point p2(map.nav_goal.pose.position.x, map.nav_goal.pose.position.y);
+    double goal_devidation = sqrt(pow((p1.x_ - p2.x_), 2) + pow((p1.y_ - p2.y_), 2));
+    if(goal_devidation > devidation_allowed)
     {
       this->map.nav_goal.pose = this->nav_goal_pose;
       return true;
@@ -253,7 +258,7 @@ class MapServerNode {
       return true; 
     else
     {
-      double devidation_allowed = 1.5;
+      
       double distance;
       for(auto iter = curve.begin(); iter != curve.end(); iter++)
       {
